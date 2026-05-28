@@ -1,0 +1,18 @@
+name: imf-diffusers
+channels:
+  - pytorch
+  - defaults
+  - nvidia
+dependencies:
+  - python=3.10
+  - pip=22.3
+  - pytorch-cuda=12.4
+  - pytorch=2.5.1
+  - torchvision=0.20.1
+  - numpy=1.26
+  - pip:
+    - diffusers>=0.35.1
+    - accelerate>=1.0.0
+    - safetensors>=0.4.0
+    - einops>=0.8.0
+    - huggingface-hub>=0.25.0

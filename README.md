@@ -1,216 +1,105 @@
-# Improved Mean Flows
+# iMF Diffusers
 
-<p align="center">
-  <img src="assets/teaser.png" width="60%">
-</p>
+PyTorch [Improved Mean Flows (iMF)](https://arxiv.org/abs/2512.02012) packaged in a native [Diffusers](https://github.com/huggingface/diffusers) layout, following the same migration pattern as [JiT-diffusers](https://github.com/Bili-Sakura/JiT-diffusers).
 
-This is the official JAX implementation for the paper [Improved Mean Flows: On the Challenges of Fastforward Generative Models](https://arxiv.org/abs/2512.02012). This code is written and tested on TPUs. For PyTorch implementation, please refer to [this branch](https://github.com/Lyy-iiis/imeanflow/tree/torch).
+This repository no longer depends on the original JAX training codebase. All model, scheduler, and pipeline code lives under `src/diffusers`.
 
-## Update
+## Package layout
 
-- **2026.02.13** Release the [PyTorch code](https://github.com/Lyy-iiis/pMF/tree/torch) for [pixel MeanFlow](https://arxiv.org/abs/2601.22158) (pMF)!
-- **2026.02.06** Release the [JAX code](https://github.com/Lyy-iiis/pMF) for [pixel MeanFlow](https://arxiv.org/abs/2601.22158) (pMF)!
+- `src/diffusers/models/transformers/transformer_imf.py` — `IMFTransformer2DModel` (`ModelMixin` / `ConfigMixin`) with dual u/v heads.
+- `src/diffusers/schedulers/scheduling_imf.py` — `IMFScheduler` for mean-flow updates from `t=1` to `t=0`.
+- `src/diffusers/pipelines/imf/pipeline_imf.py` — `IMFPipeline` with classifier-free guidance and latent sampling.
+- `scripts/convert_imf_to_diffusers.py` — convert legacy PyTorch checkpoints to Diffusers directories.
+- `scripts/convert_diffusers_to_imf.py` — convert Diffusers models back to legacy checkpoint format.
+- `scripts/sample_imf.py` — minimal latent sampling script.
 
-## Initialization
-
-Run `install.sh` to install the dependencies (JAX+TPUs). Log in to WandB to track your experiments if needed.
-
-```bash
-bash scripts/install.sh
-wandb login YOUR_WANDB_API_KEY
-```
-
-## Inference
-
-You can quickly verify your setup with our provided checkpoint.
-<table><tbody>
-<td valign="bottom"></td>
-<td valign="bottom" align="center">iMF-B/2</td>
-<td valign="bottom" align="center">iMF-M/2</td>
-<td valign="bottom" align="center">iMF-L/2</td>
-<td valign="bottom" align="center" colspan="2">iMF-XL/2</td>
-<tr><td align="left">pre-trained checkpoint (inference)</td>
-<td align="center"><a href="https://huggingface.co/Lyy0725/iMF/blob/main/iMF-B-2.zip">download</a></td>
-<td align="center"><a href="https://huggingface.co/Lyy0725/iMF/blob/main/iMF-M-2.zip">download</a></td>
-<td align="center"><a href="https://huggingface.co/Lyy0725/iMF/blob/main/iMF-L-2.zip">download</a></td>
-<td align="center" colspan="2"><a href="https://huggingface.co/Lyy0725/iMF/blob/main/iMF-XL-2.zip">download</a></td>
-</tr>
-<tr><td align="left">pre-trained checkpoint (full) </td>
-<td align="center"><a href="https://huggingface.co/Lyy0725/iMF/blob/main/iMF-B-2-full.zip">download</a></td>
-<td align="center"><a href="https://huggingface.co/Lyy0725/iMF/blob/main/iMF-M-2-full.zip">download</a></td>
-<td align="center"><a href="https://huggingface.co/Lyy0725/iMF/blob/main/iMF-L-2-full.zip">download</a></td>
-<td align="center" colspan="2"><a href="https://huggingface.co/Lyy0725/iMF/blob/main/iMF-XL-2-full.zip">download</a></td>
-</tr>
-<tr><td align="left">NFE</td>
-<td align="center">1</td>
-<td align="center">1</td>
-<td align="center">1</td>
-<td align="center">1</td>
-<td align="center">2</td>
-</tr>
-<tr><td align="left">FID (this repo / original paper)</td>
-<td align="center">3.37/3.39</td>
-<td align="center">2.27/2.27</td>
-<td align="center">1.85/1.86</td>
-<td align="center">1.70/1.72</td>
-<td align="center">1.53/1.54</td>
-</tr>
-<tr><td align="left">IS (this repo / original paper)</td>
-<td align="center">256.0/255.3</td>
-<td align="center">260.9/257.7</td>
-<td align="center">278.6/276.6</td>
-<td align="center">282.0/282.0</td>
-<td align="center">292.0/-</td>
-</tr>
-</tbody></table>
-
-Note that slight differences in FID/IS may arise due to different computation setups. 
-
-
-#### Sanity Check
-
-1. **Download the checkpoint and FID stats:** 
-    - Download the pre-trained checkpoint (inference) from the table above.
-    - Download the FID stats file from [here](https://huggingface.co/Lyy0725/iMF/blob/main/imagenet_256_fid_stats.npz). Our FID stats is computed on TPU and JAX, which may slightly differ from [those](https://huggingface.co/Lyy0725/iMF/blob/main/imagenet_256_fid_stats_torch.npz) computed on GPU and PyTorch.
-
-2. **Unzip the checkpoint:**
-    ```bash
-    unzip <downloaded_checkpoint.zip> -d <your_ckpt_dir>
-    ```
-    Replace `<downloaded_checkpoint.zip>` and `<your_ckpt_dir>` with your actual paths.
-
-3. **Set up the config:**
-    - Set `load_from` in `configs/eval_config.yml` to the path of `<your_ckpt_dir>`.
-    - Set `fid.cache_ref` to the path of the downloaded FID stats file.
-    - Set CFG-related parameters for corresponding model.
-
-4. **Launch evaluation:**
-    ```bash
-    bash scripts/eval.sh JOB_NAME
-    ```
-    Our default evaluation script generates 50,000 samples using pre-trained iMF-B/2 for FID and IS evaluation. The expected FID and IS is 3.37 and 256.0 for this checkpoint. (compared to 3.39 and 255.3 reported in the original paper)
-
-## Data Preparation
-
-Before training, you need to prepare the ImageNet dataset and compute latent representations:
-
-#### 1. Download ImageNet
-
-Download the [ImageNet](http://image-net.org/download) dataset and extract it to your desired location. The dataset should have the following structure:
-```
-imagenet/
-├── train/
-│   ├── n01440764/
-│   ├── n01443537/
-│   └── ...
-└── val/
-    ├── n01440764/
-    ├── n01443537/
-    └── ...
-```
-
-#### 2. Configure Data Paths
-
-Update the data paths in `scripts/prepare_data.sh`:
+## Install
 
 ```bash
-IMAGENET_ROOT="YOUR_IMGNET_ROOT"
-OUTPUT_DIR="YOUR_OUTPUT_DIR"
-LOG_DIR="YOUR_LOG_DIR"
+conda env create -f environment.yaml
+conda activate imf-diffusers
 ```
 
-#### 3. Launch Data Preparation
-
-Run the data preparation script to compute latent representations:
+Or with pip:
 
 ```bash
-IMAGE_SIZE=256 COMPUTE_LATENT=True bash ./scripts/prepare_data.sh
+pip install "diffusers>=0.35.1" "torch>=2.5" "accelerate" "safetensors"
 ```
 
-The script will:
-- Encode ImageNet images to latent representations using a VAE model
-- Save the latent dataset to `OUTPUT_DIR/`
-- Compute FID statistics and save to `OUTPUT_DIR/imagenet_256_fid_stats.npz`
-- Log progress to `LOG_DIR/$USER/`
+## Convert a checkpoint
 
-### Configuration Setup
+Legacy PyTorch inference checkpoints (from the upstream [torch branch](https://github.com/Lyy-iiis/imeanflow/tree/torch)) use `net.*` parameter names and can be converted as follows:
 
-After data preparation, you need to configure your FID cache reference in the config files:
-
-#### 1. Update Config Files
-
-Edit your config file (e.g., `configs/train_config.yml` and `configs/eval_config.yml`) and replace the placeholder values:
-
-```yaml
-dataset:
-    root: YOUR_DATA_ROOT  # Path to your prepared latent dataset, only for training config
-
-fid:
-    cache_ref: YOUR_FID_CACHE_REF  # Path to your FID statistics file
-```
-
-#### 2. Available Config Files
-
-- `configs/train_config.yml` - Configuration for iMF-B/2 model training (recommended)
-- `configs/eval_config.yml` - Configuration for evaluation
-- `configs/default.py` - Default configuration (Python format, used as base)
-
-**Configuration Hierarchy:**
-The system uses a hierarchical approach where `train_config.yml` and `eval_config.yml` override specific parameters from `default.py`. This allows you to customize only the parameters you need while keeping sensible defaults.
-Make sure to update both the dataset root path and the FID cache reference path according to your data preparation output.
-
-## Training
-
-Run the following commands to launch training:
 ```bash
-bash scripts/launch.sh JOB_NAME
+python scripts/convert_imf_to_diffusers.py \
+  --checkpoint_path path/to/checkpoint.pth \
+  --output_dir imf-diffusers \
+  --model_type "iMF-B/2" \
+  --safe_serialization
 ```
 
-**Note:** Update the environment variables in `scripts/train.sh` before running:
-- `DATA_ROOT`: Path to your prepared data directory
-- `LOG_DIR`: Path where to save training logs
+Supported presets: `iMF-B/2`, `iMF-M/2`, `iMF-L/2`, `iMF-XL/2`.
 
-#### Config System
+## Convert back to legacy format
 
-The training system uses two config files:
-
-- **`configs/default.py`** - Base configuration with all default hyperparameters
-- **`configs/train_config.yml`** - Model-specific overrides for iMF-B/2 training
-
-The system merges these files, allowing you to customize only the parameters you need.
-
-#### Customizing Training
-
-To create a custom experiment:
-
-1. **Create a new config file** (e.g., `configs/my_exp_config.yml`)
-2. **Update the launch script** to use your config:
-   ```bash
-   # In launch.sh, change the config line to:
-   --config=configs/load_config.py:my_exp
-   ```
-
-**Example custom config:**
-```yaml
-training:
-    num_epochs: 80                  # Train for fewer epochs
-
-method:
-    model_str: imfDiT_B_2               # Use iMF-B/2 model
-    cfg_beta: 1.0                     # Set cfg distribution
+```bash
+python scripts/convert_diffusers_to_imf.py \
+  --model_path imf-diffusers \
+  --output_path checkpoint-converted.pth
 ```
 
-for more details on configuration options, refer to `configs/default.py` and `configs/train_config.yml`.
+## Sample latents
+
+```bash
+python scripts/sample_imf.py \
+  --model imf-diffusers \
+  --class-label 207 \
+  --num-inference-steps 1 \
+  --guidance-scale 2.7 \
+  --output sample.pt
+```
+
+Decode latents with your VAE (for example Stable Diffusion VAE on 4-channel 32×32 latents).
+
+## Use in Python
+
+```python
+from src.diffusers import IMFPipeline
+
+pipeline = IMFPipeline.from_pretrained("imf-diffusers")
+pipeline = pipeline.to("cuda")
+
+output = pipeline(
+    class_labels=207,
+    num_inference_steps=1,
+    guidance_scale=2.7,
+    guidance_interval_start=0.1,
+    guidance_interval_end=0.9,
+    output_type="latent",
+)
+latents = output.images
+```
+
+## Upstreaming to Hugging Face Diffusers
+
+To upstream these components, copy files under `src/diffusers` into matching paths in `huggingface/diffusers` and register lazy imports there.
+
+## Pre-trained checkpoints
+
+| Model | Inference checkpoint | FID (paper) |
+|-------|---------------------|-------------|
+| iMF-B/2 | [download](https://huggingface.co/Lyy0725/iMF/blob/main/iMF-B-2.zip) | 3.39 |
+| iMF-M/2 | [download](https://huggingface.co/Lyy0725/iMF/blob/main/iMF-M-2.zip) | 2.27 |
+| iMF-L/2 | [download](https://huggingface.co/Lyy0725/iMF/blob/main/iMF-L-2.zip) | 1.86 |
+| iMF-XL/2 | [download](https://huggingface.co/Lyy0725/iMF/blob/main/iMF-XL-2.zip) | 1.72 |
 
 ## License
 
-This repo is under the MIT license. See [LICENSE](./LICENSE) for details.
+MIT — see [LICENSE](./LICENSE).
 
 ## Citation
 
-If you find this work useful in your research, please consider citing our paper :)
-
-```bib
+```bibtex
 @article{imeanflow,
   title={Improved Mean Flows: On the Challenges of Fastforward Generative Models},
   author={Geng, Zhengyang and Lu, Yiyang and Wu, Zongze and Shechtman, Eli and Kolter, J Zico and He, Kaiming},
@@ -218,12 +107,3 @@ If you find this work useful in your research, please consider citing our paper 
   year={2025}
 }
 ```
-
-## Contributors
-
-This repository is a collaborative effort by Kaiming He, Hanhong Zhao, Yiyang Lu, and Zhengyang Geng, developed in support of several research projects. We sincerely thank Qiao Sun, Zhicheng Jiang, Xianbang Wang for their help in building the codebase and infrastructure.
-
-## Acknowledgement
-
-We gratefully acknowledge the Google TPU Research Cloud (TRC) for granting TPU access.
-We hope this work will serve as a useful resource for the open-source community.
